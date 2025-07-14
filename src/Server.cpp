@@ -10,7 +10,11 @@ bool match_pattern(const std::string &input_line, const std::string &pattern)
     }
     else if (pattern == "\\d")
     {
-        return std::ranges::find_if(input_line, ::isdigit) != input_line.end();
+        return std::ranges::find_if(input_line, isdigit) != input_line.end();
+    }
+    else if (pattern == "\\w")
+    {
+        return std::ranges::find_if(input_line, [](char c) { return std::isalnum(c) || c == '_'; }) != input_line.end();
     }
     else
     {
@@ -49,10 +53,12 @@ int main(int argc, char *argv[])
     {
         if (match_pattern(input_line, pattern))
         {
+            std::cerr << "found" << std::endl;
             return 0;
         }
         else
         {
+            std::cerr << "not found" << std::endl;
             return 1;
         }
     }

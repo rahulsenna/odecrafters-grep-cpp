@@ -16,6 +16,15 @@ bool match_pattern(const std::string &input_line, const std::string &pattern)
     {
         return std::ranges::find_if(input_line, [](char c) { return std::isalnum(c) || c == '_'; }) != input_line.end();
     }
+    else if (pattern.front() == '[' and pattern.back() == ']')
+    {
+        for (int i = 1; i < pattern.length() - 1; ++i)
+        {
+            if (input_line.contains(pattern[i]))
+                return true;
+        }
+        return false;
+    }
     else
     {
         throw std::runtime_error("Unhandled pattern " + pattern);

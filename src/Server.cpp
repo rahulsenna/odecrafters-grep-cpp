@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <ranges>
+#include <algorithm>
 
 bool match_pattern(const std::string &input_line, const std::string &pattern)
 {
@@ -18,12 +19,12 @@ bool match_pattern(const std::string &input_line, const std::string &pattern)
     }
     else if (pattern.front() == '[' and pattern.back() == ']')
     {
-        for (int i = 1; i < pattern.length() - 1; ++i)
-        {
-            if (input_line.contains(pattern[i]))
-                return true;
-        }
-        return false;
+        if (pattern[1] == '^')
+            return not std::ranges::all_of(pattern.begin()+2, pattern.end()-1,
+                                           [&](char c) { return input_line.contains(c); });
+        
+        return std::ranges::any_of(pattern.begin()+1, pattern.end()-1,
+                                           [&](char c) { return input_line.contains(c); });
     }
     else
     {

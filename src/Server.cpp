@@ -26,6 +26,35 @@ bool match_pattern(const std::string &input_line, const std::string &pattern)
         return std::ranges::any_of(pattern.begin()+1, pattern.end()-1,
                                            [&](char c) { return input_line.contains(c); });
     }
+    else if (pattern.starts_with("\\d"))
+    {
+        auto loc = std::ranges::find_if(input_line, isdigit);
+        if (loc == input_line.end())
+            return false;
+
+        int pos = distance(input_line.begin(), loc);
+        for (int i = 0; i < pattern.length(); ++i)
+        {
+            char chr = input_line[pos++];
+            char p = pattern[i];
+
+            if (p == chr)
+                continue;
+
+            if (p != '\\')
+                return false;
+
+            p = pattern[++i];
+            if (p == 'd' and isdigit(chr))
+                continue;
+            
+            if (p == 'w' and (isalnum(chr) or chr == '_'))
+                continue;
+            
+            return false;
+        }
+        return true;
+    }
     else
     {
         throw std::runtime_error("Unhandled pattern " + pattern);

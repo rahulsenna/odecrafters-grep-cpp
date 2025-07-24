@@ -3,6 +3,31 @@
 #include <ranges>
 #include <algorithm>
 
+bool match_consecutive(std::string_view input_line, const std::string_view pattern)
+{
+    for (int i = 0,j=0; i < pattern.length(); ++i, ++j)
+    {
+        char chr = input_line[j];
+        char p = pattern[i];
+
+        if (p == chr)
+            continue;
+
+        if (p != '\\')
+            return false;
+
+        p = pattern[++i];
+        if (p == 'd' and isdigit(chr))
+            continue;
+        
+        if (p == 'w' and (isalnum(chr) or chr == '_'))
+            continue;
+        
+        return false;
+    }
+    return true;
+}
+
 bool match_pattern(const std::string &input_line, const std::string &pattern)
 {
     if (pattern.length() == 1)
@@ -33,27 +58,11 @@ bool match_pattern(const std::string &input_line, const std::string &pattern)
             return false;
 
         int pos = distance(input_line.begin(), loc);
-        for (int i = 0; i < pattern.length(); ++i)
-        {
-            char chr = input_line[pos++];
-            char p = pattern[i];
-
-            if (p == chr)
-                continue;
-
-            if (p != '\\')
-                return false;
-
-            p = pattern[++i];
-            if (p == 'd' and isdigit(chr))
-                continue;
-            
-            if (p == 'w' and (isalnum(chr) or chr == '_'))
-                continue;
-            
-            return false;
-        }
-        return true;
+        return match_consecutive(input_line.substr(pos), pattern);
+    }
+    else if (pattern.starts_with("^"))
+    {
+        return match_consecutive(input_line, pattern.substr(1));
     }
     else
     {

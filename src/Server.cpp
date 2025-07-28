@@ -47,6 +47,21 @@ bool match_consecutive(std::string_view input_line, const std::string_view patte
 
         char chr = input_line[j];
 
+        if (i<pattern.length()-1 and pattern[i+1] == '+')
+        {
+            if (p != chr)
+                return false;
+
+            while(input_line[j+1] == p)            
+                j++;
+            
+            if (i<pattern.length()-2 and pattern[i+2] == p)
+                j--;
+
+            i++;
+            continue;
+        }
+
         if (p == chr)
             continue;
 
@@ -108,7 +123,7 @@ bool match_pattern(const std::string &input_line, const std::string &pattern)
 
     else
     {
-        throw std::runtime_error("Unhandled pattern " + pattern);
+        return match_consecutive(input_line, pattern);
     }
 }
 
@@ -119,7 +134,7 @@ int main(int argc, char *argv[])
     std::cerr << std::unitbuf;
 
     std::string input2 = "cat";
-    std::string pattern2 = "cat$";
+    std::string pattern2 = "ca+t";
     auto res = match_pattern(input2, pattern2);
 
     // You can use print statements as follows for debugging, they'll be visible when running tests.

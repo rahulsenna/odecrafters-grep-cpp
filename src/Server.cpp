@@ -51,6 +51,17 @@ bool match_consecutive(std::string_view input_line, const std::string_view patte
         {
             if (pattern[ptrn_i+1] == '+')
             {
+                if (p == '.')
+                {
+                    while (str_i < input_line.length() and input_line[str_i + 1] != pattern[ptrn_i+2])
+                        str_i++;
+                    if (str_i+1 >= input_line.length() and ptrn_i+2 < pattern.length())
+                        return false;
+
+                    ptrn_i++;
+                    continue;
+                }
+
                 if (p != chr)
                     return false;
 
@@ -70,6 +81,9 @@ bool match_consecutive(std::string_view input_line, const std::string_view patte
                 continue;
             }
         }
+
+        if (p == '.')
+            continue;
 
         if (p == chr)
             continue;
@@ -117,7 +131,7 @@ bool match_pattern(const std::string &input_line, const std::string &pattern)
         auto loc = std::ranges::find_if(input_line, isdigit);
         if (loc == input_line.end())
             return false;
-
+ 
         int pos = distance(input_line.begin(), loc);
         return match_consecutive(input_line.substr(pos), pattern);
     }
@@ -145,8 +159,8 @@ int main(int argc, char *argv[])
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;
 
-    std::string input2 = "cat";
-    std::string pattern2 = "ca+t";
+    std::string input2 = "gol";
+    std::string pattern2 = "g.+gol";
     auto res = match_pattern(input2, pattern2);
 
     // You can use print statements as follows for debugging, they'll be visible when running tests.

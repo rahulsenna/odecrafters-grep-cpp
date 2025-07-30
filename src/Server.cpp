@@ -38,28 +38,37 @@ bool match_consecutive_reverse(std::string_view input_line, const std::string_vi
 
 bool match_consecutive(std::string_view input_line, const std::string_view pattern)
 {
-    for (int i = 0,j=0; i < pattern.length(); ++i, ++j)
+    for (int ptrn_i = 0,str_i=0; ptrn_i < pattern.length(); ++ptrn_i, ++str_i)
     {
-        char p = pattern[i];
+        char p = pattern[ptrn_i];
         
         if (p == '$')
-            return j == pattern.length();
+            return str_i == pattern.length();
 
-        char chr = input_line[j];
+        char chr = input_line[str_i];
 
-        if (i<pattern.length()-1 and pattern[i+1] == '+')
+        if (ptrn_i<pattern.length()-1)
         {
-            if (p != chr)
-                return false;
+            if (pattern[ptrn_i+1] == '+')
+            {
+                if (p != chr)
+                    return false;
 
-            while(input_line[j+1] == p)            
-                j++;
-            
-            if (i<pattern.length()-2 and pattern[i+2] == p)
-                j--;
+                while(input_line[str_i+1] == p)            
+                    str_i++;
 
-            i++;
-            continue;
+                if (ptrn_i<pattern.length()-2 and pattern[ptrn_i+2] == p)
+                    str_i--;
+                ptrn_i++;
+                continue;
+            }
+            if (pattern[ptrn_i+1] == '?')
+            {
+                if (p != chr)
+                    str_i--; // because the for loop will increment it, and we want to stay at the same index
+                ptrn_i++;
+                continue;
+            }
         }
 
         if (p == chr)
@@ -68,7 +77,7 @@ bool match_consecutive(std::string_view input_line, const std::string_view patte
         if (p != '\\')
             return false;
 
-        p = pattern[++i];
+        p = pattern[++ptrn_i];
         if (p == 'd' and isdigit(chr))
             continue;
         
@@ -123,7 +132,10 @@ bool match_pattern(const std::string &input_line, const std::string &pattern)
 
     else
     {
-        return match_consecutive(input_line, pattern);
+        auto loc = input_line.find(pattern[0]);
+        if (loc == -1)
+            return false;
+        return match_consecutive(input_line.substr(loc), pattern);
     }
 }
 

@@ -2,156 +2,159 @@
 #include <string>
 #include <ranges>
 #include <algorithm>
+#include <vector>
 
-bool match_consecutive_reverse(std::string_view input_line, const std::string_view pattern)
+enum Patterns{
+    w = 0x0,
+    d,
+    chr,
+    positive_chr_group,
+    negative_chr_group,
+    wildcard
+};
+
+
+bool match_pattern(const std::string_view input, const std::string_view pattern)
 {
-    for (int i = pattern.length() - 1, j = input_line.length() - 1; i >= 0; --i, --j)
+    int input_idx = 0;
+    auto found_itr = input.begin();
+    bool found_beg = false;
+
+    Patterns curr_pattern = chr;
+    std::vector<char> char_groups;
+
+    auto check_char = [&](int pttrn_idx) -> bool
     {
-        char p = pattern[i];
-        if (p == '^')
-            return j == -1;
-
-        char chr = input_line[j];
-
-        if (p == 'd' and i > 0 and pattern[i - 1] == '\\')
+        if (curr_pattern == wildcard)
+        	return true;
+        
+        if (curr_pattern == d)
         {
-            i--;
-            if (isdigit(chr))
-                continue;
-            return false;
+            if (not isdigit(input[input_idx]))
+                return false;
         }
-        if (p == 'w' and i > 0 and pattern[i - 1] == '\\')
+        else if (curr_pattern == w)
         {
-            i--;
-            if (isalnum(chr) or chr == '_')
-                continue;
-            return false;
+            if (not (isalnum(input[input_idx]) or input[input_idx] == '_'))
+                return false;
+        }
+        else if (curr_pattern == chr)
+        {
+            if (input[input_idx] != pattern[pttrn_idx])
+                return false;
+        }
+        else if (curr_pattern == positive_chr_group)
+        {
+            if (std::ranges::find(char_groups, input[input_idx]) == char_groups.end())
+                return false;
+        }
+        else if (curr_pattern == negative_chr_group)
+        {
+            if (std::ranges::find(char_groups, input[input_idx]) != char_groups.end())
+                return false;
+        }
+        return true;
+    };
+
+    for (int pttrn_idx = 0; pttrn_idx < pattern.length(); ++pttrn_idx)
+    {
+
+        if (pattern[pttrn_idx] == '^')
+        {
+            found_beg = true;
+            continue;
+        }
+        if (pattern[pttrn_idx] == '$')
+        {
+            if (input_idx < input.length())
+                return false;
+            continue;
         }
 
-        if (p == chr)
+        if (pattern[pttrn_idx] == '+')
+        {
+            while (check_char(pttrn_idx - 1) and input_idx < input.length() and input[input_idx + 1] != pattern[pttrn_idx + 2])
+                input_idx++;
+
+            continue;
+        }
+        if (pattern[pttrn_idx] == '?')
             continue;
 
-        return false;
+        curr_pattern = chr;
+
+        if (pattern[pttrn_idx] == '.')
+            curr_pattern = wildcard;
+
+        if (pattern[pttrn_idx] == '\\')
+        {
+            pttrn_idx += 1;
+            if (pattern[pttrn_idx] == 'd')
+                curr_pattern = d;
+
+            else if (pattern[pttrn_idx] == 'w')
+                curr_pattern = w;
+        }
+        if (pattern[pttrn_idx] == '[')
+        {
+            curr_pattern = positive_chr_group;
+            if (pattern[pttrn_idx + 1] == '^')
+            {
+                curr_pattern = negative_chr_group;
+                pttrn_idx++;
+            }
+
+            char_groups.clear();
+            while (pattern[++pttrn_idx] != ']')
+            {
+                char_groups.push_back(pattern[pttrn_idx]);
+            }
+        }
+        if (found_beg == false)
+        {
+            found_beg = true;
+            if (curr_pattern == d)
+                found_itr = std::ranges::find_if(input, isdigit);
+
+            else if (curr_pattern == w)
+            {
+                found_itr = std::ranges::find_if(input, isalnum);
+                if (found_itr == input.end())
+                    found_itr = std::ranges::find(input, '_');
+            }
+            else if (curr_pattern == chr)
+                found_itr = std::ranges::find(input, pattern[0]);
+
+            else if (curr_pattern == positive_chr_group)
+                found_itr = std::ranges::find_if(input, [&](char c) { return std::ranges::find(char_groups, c) != char_groups.end(); });
+            
+            else if (curr_pattern == negative_chr_group)
+                found_itr = std::ranges::find_if(input, [&](char c) { return std::ranges::find(char_groups, c) == char_groups.end(); });
+            
+            if (found_itr == input.end())
+                return false;
+            input_idx = std::distance(input.begin(), found_itr) + 1;
+            continue;
+        }
+
+        if (check_char(pttrn_idx))
+            input_idx++;
+        else if (pattern[pttrn_idx + 1] == '?')
+            pttrn_idx++;
+        else
+            return false;
     }
+
     return true;
 }
 
-bool match_consecutive(std::string_view input_line, const std::string_view pattern)
+typedef struct
 {
-    for (int ptrn_i = 0,str_i=0; ptrn_i < pattern.length(); ++ptrn_i, ++str_i)
-    {
-        char p = pattern[ptrn_i];
-        
-        if (p == '$')
-            return str_i == pattern.length();
-
-        char chr = input_line[str_i];
-
-        if (ptrn_i<pattern.length()-1)
-        {
-            if (pattern[ptrn_i+1] == '+')
-            {
-                if (p == '.')
-                {
-                    while (str_i < input_line.length() and input_line[str_i + 1] != pattern[ptrn_i+2])
-                        str_i++;
-                    if (str_i+1 >= input_line.length() and ptrn_i+2 < pattern.length())
-                        return false;
-
-                    ptrn_i++;
-                    continue;
-                }
-
-                if (p != chr)
-                    return false;
-
-                while(input_line[str_i+1] == p)            
-                    str_i++;
-
-                if (ptrn_i<pattern.length()-2 and pattern[ptrn_i+2] == p)
-                    str_i--;
-                ptrn_i++;
-                continue;
-            }
-            if (pattern[ptrn_i+1] == '?')
-            {
-                if (p != chr)
-                    str_i--; // because the for loop will increment it, and we want to stay at the same index
-                ptrn_i++;
-                continue;
-            }
-        }
-
-        if (p == '.')
-            continue;
-
-        if (p == chr)
-            continue;
-
-        if (p != '\\')
-            return false;
-
-        p = pattern[++ptrn_i];
-        if (p == 'd' and isdigit(chr))
-            continue;
-        
-        if (p == 'w' and (isalnum(chr) or chr == '_'))
-            continue;
-        
-        return false;
-    }
-    return true;
-}
-
-bool match_pattern(const std::string &input_line, const std::string &pattern)
-{
-    if (pattern.length() == 1)
-    {
-        return input_line.find(pattern) != std::string::npos;
-    }
-    else if (pattern == "\\d")
-    {
-        return std::ranges::find_if(input_line, isdigit) != input_line.end();
-    }
-    else if (pattern == "\\w")
-    {
-        return std::ranges::find_if(input_line, [](char c) { return std::isalnum(c) || c == '_'; }) != input_line.end();
-    }
-    else if (pattern.front() == '[' and pattern.back() == ']')
-    {
-        if (pattern[1] == '^')
-            return not std::ranges::all_of(pattern.begin()+2, pattern.end()-1,
-                                           [&](char c) { return input_line.contains(c); });
-        
-        return std::ranges::any_of(pattern.begin()+1, pattern.end()-1,
-                                           [&](char c) { return input_line.contains(c); });
-    }
-    else if (pattern.starts_with("\\d"))
-    {
-        auto loc = std::ranges::find_if(input_line, isdigit);
-        if (loc == input_line.end())
-            return false;
- 
-        int pos = distance(input_line.begin(), loc);
-        return match_consecutive(input_line.substr(pos), pattern);
-    }
-    else if (pattern.starts_with("^"))
-    {
-        return match_consecutive(input_line, pattern.substr(1));
-    }
-    else if (pattern.ends_with("$"))
-    {
-        return match_consecutive_reverse(input_line, pattern.substr(0, pattern.length()-1));
-    }
-
-    else
-    {
-        auto loc = input_line.find(pattern[0]);
-        if (loc == -1)
-            return false;
-        return match_consecutive(input_line.substr(loc), pattern);
-    }
-}
+	std::string_view pattern;
+	std::string_view input;
+    size_t pttrn_idx;
+    size_t input_idx;
+} thing;
 
 int main(int argc, char *argv[])
 {
@@ -159,7 +162,7 @@ int main(int argc, char *argv[])
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;
 
-    std::string input2 = "gol";
+    std::string input2 = "goøö0Ogol";
     std::string pattern2 = "g.+gol";
     auto res = match_pattern(input2, pattern2);
 

@@ -10,9 +10,20 @@ enum Patterns{
     chr,
     positive_chr_group,
     negative_chr_group,
-    wildcard
+    wildcard,
+    alternation,
+    optional,
+    word_pttrn,
+    group_pttrn,
 };
 
+typedef struct
+{
+	Patterns type;
+    char chr;
+    std::vector<std::string_view> alternations;
+
+} Group;
 
 bool match_pattern(const std::string_view input, const std::string_view pattern)
 {
@@ -22,35 +33,81 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
 
     Patterns curr_pattern = chr;
     std::vector<char> char_groups;
+    std::vector<Group> group;
+    int paren = 0;
 
-    auto check_char = [&](int pttrn_idx) -> bool
+    auto check_char = [&](Patterns pttrn, char character, std::string_view word = "") -> bool
     {
-        if (curr_pattern == wildcard)
+        if (pttrn == wildcard)
         	return true;
         
-        if (curr_pattern == d)
+        if (pttrn == d)
         {
             if (not isdigit(input[input_idx]))
                 return false;
         }
-        else if (curr_pattern == w)
+        else if (pttrn == w)
         {
             if (not (isalnum(input[input_idx]) or input[input_idx] == '_'))
                 return false;
         }
-        else if (curr_pattern == chr)
+        else if (pttrn == chr)
         {
-            if (input[input_idx] != pattern[pttrn_idx])
+            if (input[input_idx] != character)
                 return false;
         }
-        else if (curr_pattern == positive_chr_group)
+        else if (pttrn == positive_chr_group)
         {
             if (std::ranges::find(char_groups, input[input_idx]) == char_groups.end())
                 return false;
         }
-        else if (curr_pattern == negative_chr_group)
+        else if (pttrn == negative_chr_group)
         {
             if (std::ranges::find(char_groups, input[input_idx]) != char_groups.end())
+                return false;
+        }
+        else if (pttrn == word_pttrn)
+        {
+            int idx = 0;
+            while (idx < word.length() and word[idx] == input[input_idx + idx])
+                idx++;
+
+            if (idx < word.length()-1)
+                return false;            
+        }
+        return true;
+    };
+
+    auto check_group = [&]() -> bool
+    {
+        for (int i = 0; i < group.size(); ++i)
+        {
+            auto g = group[i];
+            if (g.type == optional)
+                continue;
+            
+            if (g.type == alternation)
+            {
+                bool found = false;
+                for (auto &word : g.alternations)
+                {
+                    if (check_char(word_pttrn, g.chr, word))
+                    {
+                        found = true;
+                        input_idx += word.length();
+                        break;
+                    }
+                }
+                if (found or group[i + 1].type == optional)
+                    continue;
+                return false;
+            }
+
+            if (check_char(g.type, g.chr))
+                input_idx++;
+            else if (i < group.size() - 1 and group[i + 1].type == optional)
+                continue;
+            else
                 return false;
         }
         return true;
@@ -73,15 +130,18 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
 
         if (pattern[pttrn_idx] == '+')
         {
-            while (check_char(pttrn_idx - 1) and input_idx < input.length() and input[input_idx + 1] != pattern[pttrn_idx + 2])
-                input_idx++;
+            if (curr_pattern == group_pttrn)
+                while (check_group());
+            else
+                while (check_char(curr_pattern, pattern[pttrn_idx-1]) and input_idx < input.length() and input[input_idx + 1] != pattern[pttrn_idx + 2])
+                    input_idx++;
 
             continue;
         }
-        if (pattern[pttrn_idx] == '?')
-            continue;
 
         curr_pattern = chr;
+        if (pattern[pttrn_idx] == '?')
+            curr_pattern = optional;
 
         if (pattern[pttrn_idx] == '.')
             curr_pattern = wildcard;
@@ -110,6 +170,58 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
                 char_groups.push_back(pattern[pttrn_idx]);
             }
         }
+
+        if (pattern[pttrn_idx] == '(')
+        {
+            paren++;
+            continue;
+        }
+        if (pattern[pttrn_idx] == ')')
+        {
+            paren--;
+            if (paren == 0)
+            {
+                curr_pattern = group_pttrn;
+                if (not check_group())
+                    return false;
+            }
+                
+            continue;
+        }
+        if (paren > 0)
+        {
+            Group g = {};
+            g.type = curr_pattern;
+            if (g.type == chr)
+                g.chr = pattern[pttrn_idx];
+            
+            if (pattern[pttrn_idx-1] != '(')
+            { 
+                group.push_back(g);
+            	continue;
+            }
+            int bar_idx = pattern.find('|', pttrn_idx);
+            if (bar_idx != -1)
+            {
+                int open_idx = pattern.find('(', pttrn_idx);
+                if (open_idx == -1 or bar_idx < open_idx)
+                {
+                    g.type = alternation;
+                    int close_idx = pattern.find(')', pttrn_idx);
+                    std::string_view thing = pattern.substr(pttrn_idx, close_idx-pttrn_idx);
+                    auto split_view = thing | std::views::split('|');
+                    for (auto &&range : split_view)
+                        g.alternations.emplace_back(range.begin(), range.end());
+                    pttrn_idx = close_idx-1;
+                }
+            }            
+
+            group.push_back(g);
+            continue;
+        }
+        if (curr_pattern == optional)
+            continue;
+
         if (found_beg == false)
         {
             found_beg = true;
@@ -137,7 +249,8 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
             continue;
         }
 
-        if (check_char(pttrn_idx))
+
+        if (check_char(curr_pattern, pattern[pttrn_idx]))
             input_idx++;
         else if (pattern[pttrn_idx + 1] == '?')
             pttrn_idx++;
@@ -162,8 +275,11 @@ int main(int argc, char *argv[])
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;
 
-    std::string input2 = "goøö0Ogol";
-    std::string pattern2 = "g.+gol";
+    std::string input2 = "I see 1 cat, 2 dogs and 3 cows";
+    std::string pattern2 = "^I see (\\d (cat|dog|cow)s?(, | and )?)+$";
+
+    // std::string input2 = "a cat";
+    // std::string pattern2 = "a (cat|dog)";
     auto res = match_pattern(input2, pattern2);
 
     // You can use print statements as follows for debugging, they'll be visible when running tests.

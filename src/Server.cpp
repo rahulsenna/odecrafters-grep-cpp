@@ -4,22 +4,22 @@
 #include <algorithm>
 #include <vector>
 
-enum Patterns{
-    w = 0x0,
-    d,
-    chr,
-    positive_chr_group,
-    negative_chr_group,
-    wildcard,
-    alternation,
-    optional,
-    word_pttrn,
-    group_pttrn,
+enum PatternType {
+    WORD = 0x0,
+    DIGIT,
+    CHAR,
+    POSITIVE_CHR_GROUP,
+    NEGATIVE_CHR_GROUP,
+    WILDCARD,
+    ALTERNATION,
+    OPTIONAL,
+    WORD_PTTRN,
+    GROUP_PTTRN,
 };
 
 typedef struct
 {
-	Patterns type;
+	PatternType type;
     char chr;
     std::vector<std::string_view> alternations;
 
@@ -31,49 +31,32 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
     auto found_itr = input.begin();
     bool found_beg = false;
 
-    Patterns curr_pattern = chr;
+    PatternType curr_pattern = CHAR;
     std::vector<char> char_groups;
     std::vector<Group> group;
     int paren = 0;
 
-    auto check_char = [&](Patterns pttrn, char character, std::string_view word = "") -> bool
+    auto check_char = [&](PatternType pttrn, char character, std::string_view word = "") -> bool
     {
-        if (pttrn == wildcard)
-        	return true;
-        
-        if (pttrn == d)
+        switch(pttrn)
         {
-            if (not isdigit(input[input_idx]))
-                return false;
-        }
-        else if (pttrn == w)
-        {
-            if (not (isalnum(input[input_idx]) or input[input_idx] == '_'))
-                return false;
-        }
-        else if (pttrn == chr)
-        {
-            if (input[input_idx] != character)
-                return false;
-        }
-        else if (pttrn == positive_chr_group)
-        {
-            if (std::ranges::find(char_groups, input[input_idx]) == char_groups.end())
-                return false;
-        }
-        else if (pttrn == negative_chr_group)
-        {
-            if (std::ranges::find(char_groups, input[input_idx]) != char_groups.end())
-                return false;
-        }
-        else if (pttrn == word_pttrn)
-        {
-            int idx = 0;
-            while (idx < word.length() and word[idx] == input[input_idx + idx])
-                idx++;
+            case WILDCARD:           return true;
+            case DIGIT:              return isdigit(input[input_idx]);
+            case WORD:               return (isalnum(input[input_idx]) or input[input_idx] == '_');
+            case CHAR:               return input[input_idx] == character;
+            case POSITIVE_CHR_GROUP: return std::ranges::find(char_groups, input[input_idx]) != char_groups.end();
+            case NEGATIVE_CHR_GROUP: return std::ranges::find(char_groups, input[input_idx]) == char_groups.end();
+            case WORD_PTTRN:
+            {
+                int idx = 0;
+                while (idx < word.length() and word[idx] == input[input_idx + idx])
+                    idx++;
 
-            if (idx < word.length()-1)
-                return false;            
+                if (idx < word.length()-1)
+                    return false;
+                return true;
+            };
+            default: return false;
         }
         return true;
     };
@@ -83,29 +66,29 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
         for (int i = 0; i < group.size(); ++i)
         {
             auto g = group[i];
-            if (g.type == optional)
+            if (g.type == OPTIONAL)
                 continue;
             
-            if (g.type == alternation)
+            if (g.type == ALTERNATION)
             {
-                bool found = false;
+                bool match_found = false;
                 for (auto &word : g.alternations)
                 {
-                    if (check_char(word_pttrn, g.chr, word))
+                    if (check_char(WORD_PTTRN, g.chr, word))
                     {
-                        found = true;
+                        match_found = true;
                         input_idx += word.length();
                         break;
                     }
                 }
-                if (found or group[i + 1].type == optional)
+                if (match_found or (group.size()-1 > i and group[i+1].type == OPTIONAL))
                     continue;
                 return false;
             }
 
             if (check_char(g.type, g.chr))
                 input_idx++;
-            else if (i < group.size() - 1 and group[i + 1].type == optional)
+            else if (i < group.size()-1 and group[i+1].type == OPTIONAL)
                 continue;
             else
                 return false;
@@ -130,7 +113,7 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
 
         if (pattern[pttrn_idx] == '+')
         {
-            if (curr_pattern == group_pttrn)
+            if (curr_pattern == GROUP_PTTRN)
                 while (check_group());
             else
                 while (check_char(curr_pattern, pattern[pttrn_idx-1]) and input_idx < input.length() and input[input_idx + 1] != pattern[pttrn_idx + 2])
@@ -139,28 +122,28 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
             continue;
         }
 
-        curr_pattern = chr;
+        curr_pattern = CHAR;
         if (pattern[pttrn_idx] == '?')
-            curr_pattern = optional;
+            curr_pattern = OPTIONAL;
 
         if (pattern[pttrn_idx] == '.')
-            curr_pattern = wildcard;
+            curr_pattern = WILDCARD;
 
         if (pattern[pttrn_idx] == '\\')
         {
             pttrn_idx += 1;
             if (pattern[pttrn_idx] == 'd')
-                curr_pattern = d;
+                curr_pattern = DIGIT;
 
             else if (pattern[pttrn_idx] == 'w')
-                curr_pattern = w;
+                curr_pattern = WORD;
         }
         if (pattern[pttrn_idx] == '[')
         {
-            curr_pattern = positive_chr_group;
+            curr_pattern = POSITIVE_CHR_GROUP;
             if (pattern[pttrn_idx + 1] == '^')
             {
-                curr_pattern = negative_chr_group;
+                curr_pattern = NEGATIVE_CHR_GROUP;
                 pttrn_idx++;
             }
 
@@ -181,7 +164,7 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
             paren--;
             if (paren == 0)
             {
-                curr_pattern = group_pttrn;
+                curr_pattern = GROUP_PTTRN;
                 if (not check_group())
                     return false;
             }
@@ -192,7 +175,7 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
         {
             Group g = {};
             g.type = curr_pattern;
-            if (g.type == chr)
+            if (g.type == CHAR)
                 g.chr = pattern[pttrn_idx];
             
             if (pattern[pttrn_idx-1] != '(')
@@ -206,7 +189,7 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
                 int open_idx = pattern.find('(', pttrn_idx);
                 if (open_idx == -1 or bar_idx < open_idx)
                 {
-                    g.type = alternation;
+                    g.type = ALTERNATION;
                     int close_idx = pattern.find(')', pttrn_idx);
                     std::string_view thing = pattern.substr(pttrn_idx, close_idx-pttrn_idx);
                     auto split_view = thing | std::views::split('|');
@@ -219,28 +202,28 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
             group.push_back(g);
             continue;
         }
-        if (curr_pattern == optional)
+        if (curr_pattern == OPTIONAL)
             continue;
 
         if (found_beg == false)
         {
             found_beg = true;
-            if (curr_pattern == d)
+            if (curr_pattern == DIGIT)
                 found_itr = std::ranges::find_if(input, isdigit);
 
-            else if (curr_pattern == w)
+            else if (curr_pattern == WORD)
             {
                 found_itr = std::ranges::find_if(input, isalnum);
                 if (found_itr == input.end())
                     found_itr = std::ranges::find(input, '_');
             }
-            else if (curr_pattern == chr)
+            else if (curr_pattern == CHAR)
                 found_itr = std::ranges::find(input, pattern[0]);
 
-            else if (curr_pattern == positive_chr_group)
+            else if (curr_pattern == POSITIVE_CHR_GROUP)
                 found_itr = std::ranges::find_if(input, [&](char c) { return std::ranges::find(char_groups, c) != char_groups.end(); });
             
-            else if (curr_pattern == negative_chr_group)
+            else if (curr_pattern == NEGATIVE_CHR_GROUP)
                 found_itr = std::ranges::find_if(input, [&](char c) { return std::ranges::find(char_groups, c) == char_groups.end(); });
             
             if (found_itr == input.end())

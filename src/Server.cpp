@@ -35,7 +35,8 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
 
     PatternType curr_pattern = CHAR;
     std::vector<char> char_groups;
-    std::vector<Group> group;
+    std::vector<std::vector<Group>> group;
+    group.push_back({});
     int paren = 0;
     int back_ref = -1;
     std::vector<std::string_view> captures;
@@ -49,7 +50,7 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
 
         if (pattern[pttrn_idx - 1] != '(')
         {
-            group.push_back(g);
+            group.back().push_back(g);
             return;
         }
         int bar_idx = pattern.find('|', pttrn_idx);
@@ -68,7 +69,7 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
             }
         }
 
-        group.push_back(g);
+        group.back().push_back(g);
     };
 
     auto check_char = [&](PatternType pttrn, char character, std::string_view word = "") -> bool
@@ -135,9 +136,9 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
     {
         int cap_start = input_idx;
         Group prev;
-        for (int i = 0; i < group.size(); ++i)
+        for (int i = 0; i < group.back().size(); ++i)
         {
-            auto g = group[i];
+            auto g = group.back()[i];
             if (g.type == PLUS)
             {
                 while (check_char(prev.type, prev.chr))
@@ -160,14 +161,14 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
                         break;
                     }
                 }
-                if (match_found or (group.size()-1 > i and group[i+1].type == OPTIONAL))
+                if (match_found or (group.back().size()-1 > i and group.back()[i+1].type == OPTIONAL))
                     continue;
                 return false;
             }
 
             if (check_char(g.type, g.chr))
                 input_idx++;
-            else if (i < group.size()-1 and group[i+1].type == OPTIONAL)
+            else if (i < group.back().size()-1 and group.back()[i+1].type == OPTIONAL)
                 continue;
             else
                 return false;
@@ -261,7 +262,7 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
                 if (not check_group())
                     return false;
             }
-                
+            group.push_back({});
             continue;
         }
         if (paren > 0)

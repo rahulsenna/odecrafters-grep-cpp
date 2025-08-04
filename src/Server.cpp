@@ -202,7 +202,11 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
             else
             {
                 if (curr_pattern == GROUP_PTTRN)
+                {
+                    group.pop_back();
                     while (check_group());
+                    group.push_back({});
+                }
                 else
                     while (check_char(curr_pattern, pattern[pttrn_idx - 1]) and input_idx < input.length() and input[input_idx + 1] != pattern[pttrn_idx + 2])
                         input_idx++;
@@ -261,8 +265,9 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
                 curr_pattern = GROUP_PTTRN;
                 if (not check_group())
                     return false;
+                group.push_back({});
             }
-            group.push_back({});
+            
             continue;
         }
         if (paren > 0)

@@ -40,6 +40,37 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
     int back_ref = -1;
     std::vector<std::string_view> captures;
 
+    auto build_group = [&](int &pttrn_idx) -> void
+    {
+        Group g = {};
+        g.type = curr_pattern;
+        if (g.type == CHAR)
+            g.chr = pattern[pttrn_idx];
+
+        if (pattern[pttrn_idx - 1] != '(')
+        {
+            group.push_back(g);
+            return;
+        }
+        int bar_idx = pattern.find('|', pttrn_idx);
+        if (bar_idx != -1)
+        {
+            int open_idx = pattern.find('(', pttrn_idx);
+            if (open_idx == -1 or bar_idx < open_idx)
+            {
+                g.type = ALTERNATION;
+                int close_idx = pattern.find(')', pttrn_idx);
+                std::string_view thing = pattern.substr(pttrn_idx, close_idx - pttrn_idx);
+                auto split_view = thing | std::views::split('|');
+                for (auto &&range : split_view)
+                    g.alternations.emplace_back(range.begin(), range.end());
+                pttrn_idx = close_idx - 1;
+            }
+        }
+
+        group.push_back(g);
+    };
+
     auto check_char = [&](PatternType pttrn, char character, std::string_view word = "") -> bool
     {
         if (found_beg == false)
@@ -165,18 +196,17 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
             if (paren > 0 )
             {
                 curr_pattern = PLUS;
-                goto BUILD_GROUP;
+                build_group(pttrn_idx);
             }                
             else
-            {            
+            {
                 if (curr_pattern == GROUP_PTTRN)
                     while (check_group());
                 else
-                    while (check_char(curr_pattern, pattern[pttrn_idx-1]) and input_idx < input.length() and input[input_idx + 1] != pattern[pttrn_idx + 2])
+                    while (check_char(curr_pattern, pattern[pttrn_idx - 1]) and input_idx < input.length() and input[input_idx + 1] != pattern[pttrn_idx + 2])
                         input_idx++;
-
-                continue;
             }
+            continue;
         }
 
         curr_pattern = CHAR;
@@ -236,34 +266,7 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
         }
         if (paren > 0)
         {
-BUILD_GROUP:
-            Group g = {};
-            g.type = curr_pattern;
-            if (g.type == CHAR)
-                g.chr = pattern[pttrn_idx];
-            
-            if (pattern[pttrn_idx-1] != '(')
-            { 
-                group.push_back(g);
-            	continue;
-            }
-            int bar_idx = pattern.find('|', pttrn_idx);
-            if (bar_idx != -1)
-            {
-                int open_idx = pattern.find('(', pttrn_idx);
-                if (open_idx == -1 or bar_idx < open_idx)
-                {
-                    g.type = ALTERNATION;
-                    int close_idx = pattern.find(')', pttrn_idx);
-                    std::string_view thing = pattern.substr(pttrn_idx, close_idx-pttrn_idx);
-                    auto split_view = thing | std::views::split('|');
-                    for (auto &&range : split_view)
-                        g.alternations.emplace_back(range.begin(), range.end());
-                    pttrn_idx = close_idx-1;
-                }
-            }            
-
-            group.push_back(g);
+            build_group(pttrn_idx);
             continue;
         }
         if (curr_pattern == OPTIONAL)

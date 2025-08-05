@@ -3,6 +3,10 @@
 #include <ranges>
 #include <algorithm>
 #include <vector>
+#include <deque>
+#include <functional>
+#include <format>
+#include <functional>
 
 enum PatternType {
     WORD_CHAR = 0x0,
@@ -17,6 +21,8 @@ enum PatternType {
     GROUP_PTTRN,
     BACK_REF,
     PLUS,
+    PAREN_OPEN,
+    PAREN_CLOSE,
 };
 
 typedef struct
@@ -24,7 +30,8 @@ typedef struct
 	PatternType type;
     char chr;
     std::vector<std::string_view> alternations;
-
+    int backet_idx;
+    char terminate;
 } Group;
 
 bool match_pattern(const std::string_view input, const std::string_view pattern)
@@ -34,6 +41,7 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
     bool found_beg = false;
 
     PatternType curr_pattern = CHAR;
+    std::vector<std::vector<char>> brackets;
     std::vector<char> char_groups;
     std::vector<std::vector<Group>> group;
     group.push_back({});
@@ -47,6 +55,18 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
         g.type = curr_pattern;
         if (g.type == CHAR)
             g.chr = pattern[pttrn_idx];
+
+        if (g.type == POSITIVE_CHR_GROUP or g.type == NEGATIVE_CHR_GROUP)
+        {
+            g.backet_idx = brackets.size()-1;
+        }
+        if (g.type == NEGATIVE_CHR_GROUP)
+        { 
+            int pi =pttrn_idx +1;
+            while(pattern[pi] == '+' or pattern[pi] == ')')
+                pi++;
+        	g.terminate = pattern[pi];
+        }
 
         if (pattern[pttrn_idx - 1] != '(')
         {
@@ -132,15 +152,44 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
         return true;
     };
 
-    auto check_group = [&]() -> bool
+    std::deque<std::pair<int,int>> depth_rec;
+    std::function<bool()> check_group = [&]() -> bool
     {
+        int cap_count = captures.size();
+        captures.push_back({});
         int cap_start = input_idx;
         Group prev;
         for (int i = 0; i < group.back().size(); ++i)
         {
             auto g = group.back()[i];
+            if (g.type == POSITIVE_CHR_GROUP or g.type == NEGATIVE_CHR_GROUP)
+            {
+                char_groups = brackets[g.backet_idx];
+            }
+
+            if (g.type == PAREN_OPEN)
+            {
+                depth_rec.push_back({captures.size(), input_idx});
+                captures.push_back({});                
+                continue;
+            }
+            if (g.type == PAREN_CLOSE)
+            {
+                auto [a,b] = depth_rec.front();
+                depth_rec.pop_front();
+                captures[a] = input.substr(b, input_idx-b);
+                continue;
+            }
             if (g.type == PLUS)
             {
+                if (prev.type == NEGATIVE_CHR_GROUP)
+                {
+                    while (not check_char(CHAR, prev.terminate))
+                        input_idx++;
+                    continue;                    
+                }
+                
+                
                 while (check_char(prev.type, prev.chr))
                     input_idx++;
                 continue;
@@ -173,7 +222,7 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
             else
                 return false;
         }
-        captures.push_back(input.substr(cap_start, input_idx-cap_start));
+        captures[cap_count] = input.substr(cap_start, input_idx-cap_start);
         return true;
     };
 
@@ -245,21 +294,33 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
                 pttrn_idx++;
             }
 
-            char_groups.clear();
+            // char_groups.clear();
+            brackets.push_back({});
             while (pattern[++pttrn_idx] != ']')
             {
-                char_groups.push_back(pattern[pttrn_idx]);
+                brackets.back().push_back(pattern[pttrn_idx]);
             }
+            char_groups = brackets.back();
         }
 
         if (pattern[pttrn_idx] == '(')
         {
+            if (paren>0)
+            {
+                curr_pattern = PAREN_OPEN;
+                build_group(pttrn_idx);
+            }
             paren++;
             continue;
         }
         if (pattern[pttrn_idx] == ')')
         {
             paren--;
+            if (paren>0)
+            {
+                curr_pattern = PAREN_CLOSE;
+                build_group(pttrn_idx);
+            }
             if (paren == 0)
             {
                 curr_pattern = GROUP_PTTRN;

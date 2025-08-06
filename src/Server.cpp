@@ -152,7 +152,7 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
         return true;
     };
 
-    std::deque<std::pair<int,int>> depth_rec;
+    std::deque<std::pair<int,int>> depth;
     std::function<bool()> check_group = [&]() -> bool
     {
         int cap_count = captures.size();
@@ -169,27 +169,22 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
 
             if (g.type == PAREN_OPEN)
             {
-                depth_rec.push_back({captures.size(), input_idx});
+                depth.push_back({captures.size(), input_idx});
                 captures.push_back({});                
                 continue;
             }
             if (g.type == PAREN_CLOSE)
             {
-                auto [a,b] = depth_rec.front();
-                depth_rec.pop_front();
+                auto [a,b] = depth.front();
+                depth.pop_front();
                 captures[a] = input.substr(b, input_idx-b);
                 continue;
             }
             if (g.type == PLUS)
             {
-                if (prev.type == NEGATIVE_CHR_GROUP)
-                {
-                    while (not check_char(CHAR, prev.terminate))
-                        input_idx++;
-                    continue;                    
-                }
-                
-                
+                if (prev.type == NEGATIVE_CHR_GROUP)                
+                    char_groups.push_back(prev.terminate);
+
                 while (check_char(prev.type, prev.chr))
                     input_idx++;
                 continue;
@@ -229,107 +224,99 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
     for (int pttrn_idx = 0; pttrn_idx < pattern.length(); ++pttrn_idx)
     {
 
-        if (pattern[pttrn_idx] == '^')
+        switch (pattern[pttrn_idx])
         {
-            found_beg = true;
-            continue;
-        }
-        if (pattern[pttrn_idx] == '$')
-        {
-            if (input_idx < input.length())
-                return false;
-            continue;
-        }
-
-        if (pattern[pttrn_idx] == '+')
-        {
-            if (paren > 0 )
-            {
-                curr_pattern = PLUS;
-                build_group(pttrn_idx);
-            }                
-            else
-            {
-                if (curr_pattern == GROUP_PTTRN)
+            case '^':found_beg = true; continue;
+            case '$':
+                if (input_idx < input.length())
+                    return false;
+                continue;
+            case '+':
+                if (paren > 0)
                 {
-                    group.pop_back();
-                    while (check_group());
+                    curr_pattern = PLUS;
+                    build_group(pttrn_idx);
+                }                
+                else
+                {
+                    if (curr_pattern == GROUP_PTTRN)
+                    {
+                        group.pop_back();
+                        while (check_group());
+                        group.push_back({});
+                    }
+                    else
+                        while (check_char(curr_pattern, pattern[pttrn_idx - 1]) && input_idx < input.length() && input[input_idx + 1] != pattern[pttrn_idx + 2])
+                            input_idx++;
+                }
+                continue;
+                
+            case '?': curr_pattern = OPTIONAL; break;
+            case '.': curr_pattern = WILDCARD; break;
+            case '\\':
+                pttrn_idx += 1;
+                switch (pattern[pttrn_idx])
+                {
+                    case 'd':
+                        curr_pattern = DIGIT;
+                        break;
+                    case 'w':
+                        curr_pattern = WORD_CHAR;
+                        break;
+                    default:
+                        if (isdigit(pattern[pttrn_idx]))
+                        {
+                            curr_pattern = BACK_REF;
+                            back_ref = pattern[pttrn_idx] - '0';
+                        }
+                        break;
+                }
+                break;
+                
+            case '[':
+                curr_pattern = POSITIVE_CHR_GROUP;
+                if (pattern[pttrn_idx + 1] == '^')
+                {
+                    curr_pattern = NEGATIVE_CHR_GROUP;
+                    pttrn_idx++;
+                }
+
+                brackets.push_back({});
+                while (pattern[++pttrn_idx] != ']')
+                {
+                    brackets.back().push_back(pattern[pttrn_idx]);
+                }
+                char_groups = brackets.back();
+                break;
+                
+            case '(':
+                if (paren > 0)
+                {
+                    curr_pattern = PAREN_OPEN;
+                    build_group(pttrn_idx);
+                }
+                paren++;
+                continue;
+                
+            case ')':
+                paren--;
+                if (paren > 0)
+                {
+                    curr_pattern = PAREN_CLOSE;
+                    build_group(pttrn_idx);
+                }
+                if (paren == 0)
+                {
+                    curr_pattern = GROUP_PTTRN;
+                    if (not check_group())
+                        return false;
                     group.push_back({});
                 }
-                else
-                    while (check_char(curr_pattern, pattern[pttrn_idx - 1]) and input_idx < input.length() and input[input_idx + 1] != pattern[pttrn_idx + 2])
-                        input_idx++;
-            }
-            continue;
-        }
-
-        curr_pattern = CHAR;
-        if (pattern[pttrn_idx] == '?')
-            curr_pattern = OPTIONAL;
-
-        if (pattern[pttrn_idx] == '.')
-            curr_pattern = WILDCARD;
-
-        if (pattern[pttrn_idx] == '\\')
-        {
-            pttrn_idx += 1;
-            if (pattern[pttrn_idx] == 'd')
-                curr_pattern = DIGIT;
-
-            else if (pattern[pttrn_idx] == 'w')
-                curr_pattern = WORD_CHAR;
-            
-            else if (isdigit(pattern[pttrn_idx]))
-            {
-                curr_pattern = BACK_REF;
-                back_ref = pattern[pttrn_idx] - '0';
-            }
-        }
-        if (pattern[pttrn_idx] == '[')
-        {
-            curr_pattern = POSITIVE_CHR_GROUP;
-            if (pattern[pttrn_idx + 1] == '^')
-            {
-                curr_pattern = NEGATIVE_CHR_GROUP;
-                pttrn_idx++;
-            }
-
-            // char_groups.clear();
-            brackets.push_back({});
-            while (pattern[++pttrn_idx] != ']')
-            {
-                brackets.back().push_back(pattern[pttrn_idx]);
-            }
-            char_groups = brackets.back();
-        }
-
-        if (pattern[pttrn_idx] == '(')
-        {
-            if (paren>0)
-            {
-                curr_pattern = PAREN_OPEN;
-                build_group(pttrn_idx);
-            }
-            paren++;
-            continue;
-        }
-        if (pattern[pttrn_idx] == ')')
-        {
-            paren--;
-            if (paren>0)
-            {
-                curr_pattern = PAREN_CLOSE;
-                build_group(pttrn_idx);
-            }
-            if (paren == 0)
-            {
-                curr_pattern = GROUP_PTTRN;
-                if (not check_group())
-                    return false;
-                group.push_back({});
-            }
-            
-            continue;
+                continue;
+                
+            default:
+                curr_pattern = CHAR;
+                break;
         }
         if (paren > 0)
         {
@@ -350,16 +337,8 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
     return true;
 }
 
-typedef struct
-{
-	std::string_view pattern;
-	std::string_view input;
-    size_t pttrn_idx;
-    size_t input_idx;
-} thing;
-
 int main(int argc, char *argv[])
-{
+{ 
     // Flush after every std::cout / std::cerr
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;

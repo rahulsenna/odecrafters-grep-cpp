@@ -7,6 +7,7 @@
 #include <functional>
 #include <format>
 #include <functional>
+#include <fstream>
 
 enum PatternType {
     WORD_CHAR = 0x0,
@@ -21,6 +22,7 @@ enum PatternType {
     GROUP_PTTRN,
     BACK_REF,
     PLUS,
+    STAR,
     PAREN_OPEN,
     PAREN_CLOSE,
 };
@@ -223,7 +225,6 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
 
     for (int pttrn_idx = 0; pttrn_idx < pattern.length(); ++pttrn_idx)
     {
-
         switch (pattern[pttrn_idx])
         {
             case '^':found_beg = true; continue;
@@ -232,6 +233,7 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
                     return false;
                 continue;
             case '+':
+            case '*':
                 if (paren > 0)
                 {
                     curr_pattern = PLUS;
@@ -246,8 +248,29 @@ bool match_pattern(const std::string_view input, const std::string_view pattern)
                         group.push_back({});
                     }
                     else
-                        while (check_char(curr_pattern, pattern[pttrn_idx - 1]) && input_idx < input.length() && input[input_idx + 1] != pattern[pttrn_idx + 2])
+                    {
+                        bool tail_match = false;
+                        int tail_match_i = pttrn_idx + 1;
+                        std::string tail = "";
+                        int p = pttrn_idx + 1;
+                        while (p < pattern.length() and (isalnum(pattern[p]) or pattern[p] == '_'))
+                        {
+                            tail += pattern[p++];
+                        }
+                        int stop_len = input.length();
+                        if (not tail.empty())
+                        {
+                            int fidx = input.find(tail, input_idx);
+                            if (fidx != -1)
+                                stop_len = fidx;
+                        }
+
+                        while (check_char(curr_pattern, pattern[pttrn_idx - 1]) && input_idx < stop_len)
+                        {
                             input_idx++;
+
+                        }
+                    }
                 }
                 continue;
                 
@@ -346,7 +369,7 @@ int main(int argc, char *argv[])
     // You can use print statements as follows for debugging, they'll be visible when running tests.
     std::cerr << "Logs from your program will appear here" << std::endl;
 
-    if (argc != 3)
+    if (argc < 3)
     {
         std::cerr << "Expected two arguments" << std::endl;
         return 1;
@@ -359,6 +382,33 @@ int main(int argc, char *argv[])
     {
         std::cerr << "Expected first argument to be '-E'" << std::endl;
         return 1;
+    }
+
+    std::string filename = "";
+    if (argc>=4)
+        filename = argv[3];
+
+    if (not filename.empty())
+    {
+        std::ifstream file(filename);
+
+        if (not file.is_open())
+        {
+            std::cerr << " Failed to open file " << '\n';
+        }
+
+        std::string input_line;
+
+        while(std::getline(file, input_line))
+        {
+            if (match_pattern(input_line, pattern))
+            {
+                std::cout << input_line << '\n';
+                return 0;
+            }
+        }
+        return 1;
+
     }
 
     std::string input_line;

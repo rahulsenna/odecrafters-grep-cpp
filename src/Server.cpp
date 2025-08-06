@@ -398,16 +398,17 @@ int main(int argc, char *argv[])
         }
 
         std::string input_line;
+        int res = 1;
 
         while(std::getline(file, input_line))
         {
             if (match_pattern(input_line, pattern))
             {
                 std::cout << input_line << '\n';
-                return 0;
+                res = 0;
             }
         }
-        return 1;
+        return res;
 
     }
 

@@ -384,32 +384,34 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    std::string filename = "";
     if (argc>=4)
-        filename = argv[3];
-
-    if (not filename.empty())
     {
-        std::ifstream file(filename);
-
-        if (not file.is_open())
-        {
-            std::cerr << " Failed to open file " << '\n';
-        }
-
-        std::string input_line;
         int res = 1;
-
-        while(std::getline(file, input_line))
+        for (int i = 3; i < argc; ++i)
         {
-            if (match_pattern(input_line, pattern))
+            std::string filename = argv[i];
+            std::ifstream file(filename);
+
+            if (not file.is_open())
             {
-                std::cout << input_line << '\n';
-                res = 0;
+                std::cerr << " Failed to open file " << '\n';
+            }
+            std::string prefix = "";
+            if (argc > 4)
+                prefix = filename + ':';
+
+            std::string input_line;
+
+            while (std::getline(file, input_line))
+            {
+                if (match_pattern(input_line, pattern))
+                {
+                    std::cout << prefix << input_line << '\n';
+                    res = 0;
+                }
             }
         }
         return res;
-
     }
 
     std::string input_line;

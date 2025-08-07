@@ -8,6 +8,7 @@
 #include <format>
 #include <functional>
 #include <fstream>
+#include <filesystem>
 
 enum PatternType {
     WORD_CHAR = 0x0,
@@ -377,6 +378,31 @@ int main(int argc, char *argv[])
 
     std::string flag = argv[1];
     std::string pattern = argv[2];
+    bool recursive = false;
+    std::string directory;
+    std::vector<std::string> files;
+    
+    if (flag == "-r")
+    {
+        recursive = true;
+        flag = "-E";
+        pattern = argv[3];
+        directory = argv[4];
+
+        for (auto &entry : std::filesystem::recursive_directory_iterator(directory))
+        {
+            if (entry.is_regular_file())
+                files.push_back(entry.path());
+        }
+    }
+    else
+    {
+        for (int i = 3; i < argc; ++i)
+        {
+            std::string filename = argv[i];
+            files.push_back(filename);
+        }
+    }
 
     if (flag != "-E")
     {
@@ -384,12 +410,11 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (argc>=4)
+    if (not files.empty())
     {
         int res = 1;
-        for (int i = 3; i < argc; ++i)
+        for (auto filename: files)
         {
-            std::string filename = argv[i];
             std::ifstream file(filename);
 
             if (not file.is_open())
@@ -397,7 +422,7 @@ int main(int argc, char *argv[])
                 std::cerr << " Failed to open file " << '\n';
             }
             std::string prefix = "";
-            if (argc > 4)
+            if (files.size()>1)
                 prefix = filename + ':';
 
             std::string input_line;
